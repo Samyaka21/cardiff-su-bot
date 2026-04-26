@@ -1,0 +1,9 @@
+[theme]
+primaryColor = "#DB126C"  # Official Cardiff SU Razzmatazz
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F8F9FA"
+textColor = "#313131"
+font = "sans serif"
+
+[client]
+showErrorDetails = false

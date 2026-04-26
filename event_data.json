@@ -1,0 +1,33 @@
+[
+    {
+        "title": "10 Year Celebration - Garden Party",
+        "date": "April 25, 2026",
+        "time": "2pm - 6pm",
+        "location": "Pontcanna Fields",
+        "description": "Music, pizza and vibes to celebrate 10 years!",
+        "link": "https://www.cardiffstudents.com/app/events/"
+    },
+    {
+        "title": "Undr The Cosh LIVE",
+        "date": "April 25, 2026",
+        "time": "7:30pm",
+        "location": "The Great Hall, SU",
+        "link": "https://www.cardiffboxoffice.com/events/"
+    },
+    {
+        "title": "Madri Mondays!",
+        "date": "April 27, 2026",
+        "time": "4pm - Midnight",
+        "location": "The Taf",
+        "description": "Weekly drink deals at the student local.",
+        "link": "https://www.cardiffstudents.com/about/the-taf/"
+    },
+    {
+        "title": "YOLO (Varsity Edition)",
+        "date": "April 22, 2026",
+        "time": "9pm - 3am",
+        "location": "Y Plas",
+        "description": "The legendary Wednesday night out.",
+        "link": "https://www.cardiffstudents.com/whatson/y-plas/"
+    }
+]
