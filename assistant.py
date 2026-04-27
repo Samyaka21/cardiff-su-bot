@@ -82,6 +82,7 @@ def generate_source_aware_prompt(user_question):
     4. If you don't know the answer, point them to https://www.cardiffstudents.com/about/contact/.
     5. Always end with 'Source Link:' and the most relevant URL found.
     6. If the context contains a long list of text, scan it specifically for names of clubs, societies, or training courses the user mentioned.
+    7. YOU MUST SEARCH THROUGH ALL 10 CONTEXT CHUNKS. Look for words like 'Dance', 'Ballet', 'Hip Hop', or 'Society'. If you see a list of names, the user wants that list. Do not give up easily.
     """
 
     # Final Prompt
