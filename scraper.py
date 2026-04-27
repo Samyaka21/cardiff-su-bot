@@ -1,51 +1,55 @@
-import requests
-from bs4 import BeautifulSoup
+import time
 import json
 import os
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from bs4 import BeautifulSoup
 
-def scrape_cardiff_su():
-    # Define the "Hubs" that contain the most important info
-    urls_to_scrape = [
-        "https://www.cardiffstudents.com/",
+def scrape_with_selenium():
+    urls = [
         "https://www.cardiffstudents.com/activities/societies/",
-        "https://www.cardiffstudents.com/advice/",
-        "https://www.cardiffstudents.com/activities/sports/",
-        "https://www.cardiffstudents.com/about-us/contact/"
+        "https://www.cardiffstudents.com/advice/"
     ]
     
-    all_data = []
+    # Setup Chrome options (Running "headless" means no window pops up)
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    # This version tells Selenium to find the browser itself
+    driver = webdriver.Chrome(options=chrome_options)
     
-    for url in urls_to_scrape:
-        print(f"Scraping: {url}...")
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Remove junk like scripts and styles
-                for script in soup(["script", "style"]):
-                    script.extract()
+    all_data = []
 
-                text = soup.get_text(separator=' ')
-                # Clean up the white space
-                clean_text = ' '.join(text.split())
-                
-                all_data.append({
-                    "url": url,
-                    "content": clean_text
-                })
-        except Exception as e:
-            print(f"Failed to scrape {url}: {e}")
+    for url in urls:
+        print(f"Deep Scanning: {url}...")
+        driver.get(url)
+        
+        # Give the JavaScript 5 seconds to load the societies list
+        time.sleep(5) 
+        
+        # Get the fully rendered HTML
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        text = soup.get_text(separator=' ')
+        clean_text = ' '.join(text.split())
 
-    # Save everything to the JSON file
-    data_folder = os.path.join(os.path.dirname(__file__), "data")
+        all_data.append({
+            "url": url,
+            "content": clean_text
+        })
+
+    driver.quit()
+
+    data_folder = "data"
     if not os.path.exists(data_folder):
         os.makedirs(data_folder)
         
     with open(os.path.join(data_folder, "raw_su_data.json"), "w", encoding='utf-8') as f:
         json.dump(all_data, f, indent=4)
-    
-    print(f"Done! Scraped {len(all_data)} pages.")
+    print("Done! Data is now truly complete.")
 
 if __name__ == "__main__":
-    scrape_cardiff_su()
+    scrape_with_selenium()
