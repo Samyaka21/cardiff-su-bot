@@ -23,7 +23,7 @@ def get_fresh_events():
         print(f"Error reading JSON: {e}")
         return []
 
-def search_database(query, n_results=3):
+def search_database(query, n_results=10):
     """Searches both the static database and the hourly scraped text file."""
     try:
         query_embedding = model.encode(query).tolist()
@@ -81,6 +81,7 @@ def generate_source_aware_prompt(user_question):
     3. Use the 'LIVE HOURLY WEB UPDATES' for general news happening right now.
     4. If you don't know the answer, point them to https://www.cardiffstudents.com/about/contact/.
     5. Always end with 'Source Link:' and the most relevant URL found.
+    6. If the context contains a long list of text, scan it specifically for names of clubs, societies, or training courses the user mentioned.
     """
 
     # Final Prompt
