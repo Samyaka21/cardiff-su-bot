@@ -1,59 +1,49 @@
 import json
 import os
-import re
+from bs4 import BeautifulSoup
 
-def clean_text(text):
-    # 1. Remove excessive whitespace and newlines
-    text = re.sub(r'\s+', ' ', text)
+def clean_text(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    # Remove script and style elements
+    for script_or_style in soup(["script", "style"]):
+        script_or_style.decompose()
     
-    # 2. Common "Junk" phrases found in SU headers/footers
-    # We can add more to this list as we find them
-    junk_phrases = [
-        "Login", "Register", "Toggle navigation", "Search", 
-        "Cardiff University Students' Union", "All rights reserved",
-        "Follow us on social media", "Cookies Policy", "Privacy Policy"
-    ]
-    
-    for phrase in junk_phrases:
-        text = text.replace(phrase, "")
-    
-    return text.strip()
+    # Get text and clean up whitespace
+    text = soup.get_text()
+    lines = (line.strip() for line in text.splitlines())
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    return '\n'.join(chunk for chunk in chunks if chunk)
 
 def process_cleaning():
-    # Ensure directories exist
-    if not os.path.exists('data/raw_su_data.json'):
-        print("Error: raw_su_data.json not found! Did you run Day 1?")
+    print("Starting Data Cleaning...")
+    
+    data_path = os.path.join('data', 'raw_su_data.json')
+    
+    if not os.path.exists(data_path):
+        print("Error: raw_su_data.json not found!")
         return
 
-    # Load the raw data from Day 1
-    with open('data/raw_su_data.json', 'r', encoding='utf-8') as f:
+    with open(data_path, 'r', encoding='utf-8') as f:
         raw_data = json.load(f)
 
     cleaned_data = []
-
-    print("Starting Day 2: Cleaning HTML content...")
-
     for entry in raw_data:
-        print(f"Cleaning {entry['category']}...")
+        # Check if it's the new format (url) or old format (category)
+        source_label = entry.get('url', entry.get('category', 'Unknown Source'))
         
-        raw_text = entry['content']
-        # Clean the content 
-        clean_content = clean_text(raw_text)
+        print(f"Cleaning content from: {source_label}...")
         
-        # Keep the metadata! This is crucial for being 'Source-Aware' 
+        text = clean_text(entry['content'])
         cleaned_data.append({
-            "category": entry['category'],
-            "source_url": entry['source_url'],
-            "content": clean_content,
-            "date_cleaned": "2026-04-17"
+            "source": source_label,
+            "content": text
         })
 
-    # Save to a new file for Day 3
-    with open('data/cleaned_su_data.json', 'w', encoding='utf-8') as f:
+    # Save the cleaned data
+    with open(os.path.join('data', 'cleaned_data.json'), 'w', encoding='utf-8') as f:
         json.dump(cleaned_data, f, indent=4)
-
-    print("\n--- Day 2 Complete! ---")
-    print("Cleaned data saved to: data/cleaned_su_data.json")
+    
+    print(f"Successfully cleaned {len(cleaned_data)} pages!")
 
 if __name__ == "__main__":
     process_cleaning()
