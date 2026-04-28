@@ -2,31 +2,32 @@ name: Hourly SU Scrape
 
 on:
   schedule:
-    - cron: '0 * * * *' # This runs at the start of every hour
-  workflow_dispatch: # This allows you to trigger it manually on GitHub if needed
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Install dependencies
-        run: pip install requests beautifulsoup4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
 
-      - name: Run Scraper
-        run: python scraper.py
+    - name: Install dependencies
+      run: |
+        pip install requests beautifulsoup4
 
-      - name: Commit and Push changes
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add data/latest_events.txt
-          git commit -m "Hourly auto-update of SU events" || exit 0
-          git push
+    - name: Run Scraper
+      run: python scraper.py
+
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add data/raw_su_data.json
+        git commit -m "Hourly auto-update" || echo "No changes to commit"
+        git push

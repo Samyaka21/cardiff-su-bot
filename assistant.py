@@ -23,7 +23,7 @@ def get_fresh_events():
         print(f"Error reading JSON: {e}")
         return []
 
-def search_database(query, n_results=10):
+def search_database(query, n_results=3):
     """Searches both the static database and the hourly scraped text file."""
     try:
         query_embedding = model.encode(query).tolist()
