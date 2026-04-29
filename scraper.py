@@ -1,11 +1,27 @@
-import requests
-from bs4 import BeautifulSoup
 import json
 import os
 import time
+import random
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from bs4 import BeautifulSoup
+
+def create_driver():
+    """Helper to create a fresh Chrome instance"""
+    chrome_options = Options()
+    chrome_options.add_argument("--headless") 
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    
+    # Path for your Mac - adjust if Chrome is installed elsewhere
+    chrome_options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    
+    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
 def scrape_su():
-    # FULL LIST OF 108 URLs INTEGRATED
     urls = [
         "https://www.cardiffstudents.com/", "https://www.cardiffstudents.com/whatson/all/",
         "https://www.cardiffstudents.com/whatson/live-music/", "https://www.cardiffstudents.com/whatson/bars-club/",
@@ -63,50 +79,56 @@ def scrape_su():
         "https://www.cardiffstudents.com/advice/student-life/", "https://www.cardiffstudents.com/our-venues/"
     ]
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-
     all_data = []
-    print(f"🚀 Starting High-Precision Scrape of {len(urls)} pages...")
+    print(f"🚀 Starting Resilient Selenium Deep-Scrape of {len(urls)} pages...")
+    
+    driver = create_driver()
 
-    for i, url in enumerate(urls):
-        try:
-            print(f"[{i+1}/{len(urls)}] Target: {url}")
-            response = requests.get(url, headers=headers, timeout=15)
-            if response.status_code != 200:
-                print(f"   ⚠️ Skipped: {response.status_code}")
+    try:
+        for i, url in enumerate(urls):
+            # RESTART BROWSER EVERY 10 PAGES to clear memory/prevent session ID errors
+            if i > 0 and i % 10 == 0:
+                print("♻️ Session limit reached. Restarting Chrome to clear heap memory...")
+                driver.quit()
+                driver = create_driver()
+
+            print(f"[{i+1}/{len(urls)}] Processing: {url}")
+            try:
+                driver.get(url)
+                time.sleep(5) # Allow JS to execute
+                
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+
+                # Clean out the noise
+                for noise in soup(["nav", "footer", "script", "style", "header", "aside"]):
+                    noise.decompose()
+
+                # Extract text
+                body_text = soup.get_text(separator=' ', strip=True)
+                
+                if len(body_text) > 150:
+                    all_data.append({"url": url, "content": body_text})
+                    print(f"   ✅ Success: Captured {len(body_text)} chars")
+                else:
+                    print(f"   ⚠️ Warning: Page appears thin or empty.")
+                
+                time.sleep(random.uniform(1, 2))
+
+            except Exception as e:
+                print(f"   ❌ Error loading {url}: {e}")
+                # If error is session related, restart immediately
+                driver.quit()
+                driver = create_driver()
                 continue
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
 
-            # 1. DELETE NOISE (Nav, Footer, Scripts)
-            for noise in soup(["nav", "footer", "script", "style", "header", "aside", "form"]):
-                noise.decompose()
-
-            # 2. EXTRACT ACCORDIONS (Hidden text)
-            # Targeting common patterns for expandible content
-            extra_content = []
-            for item in soup.find_all(['details', 'div'], class_=['accordion', 'content-area', 'panel', 'tab-content']):
-                extra_content.append(item.get_text(separator=' ', strip=True))
-
-            # 3. GET MAIN BODY CONTENT
-            # We focus on the <main> tag if it exists to avoid sidebar junk
-            main_body = soup.find('main') or soup.find('body')
-            body_text = main_body.get_text(separator=' ', strip=True)
-            
-            full_text = body_text + " " + " ".join(extra_content)
-
-            all_data.append({"url": url, "content": full_text})
-            time.sleep(1) # Politeness delay
-
-        except Exception as e:
-            print(f"   ❌ Error: {e}")
+    finally:
+        driver.quit()
 
     os.makedirs('data', exist_ok=True)
     with open('data/raw_su_data.json', 'w', encoding='utf-8') as f:
         json.dump(all_data, f, indent=4)
-    print("\n✅ Scrape complete. Run cleaner.py next.")
+    
+    print(f"\n✅ SCRAPE FINISHED! Total valid pages in raw_su_data: {len(all_data)}")
 
 if __name__ == "__main__":
     scrape_su()
