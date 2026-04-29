@@ -1,48 +1,57 @@
 import json
 import os
 
-def chunk_text(text, chunk_size=500, overlap=50):
-    chunks = []
-    # We use overlap so sentences aren't cut off awkwardly in the middle
-    for i in range(0, len(text), chunk_size - overlap):
-        chunk = text[i:i + chunk_size]
-        chunks.append(chunk)
-    return chunks
-
-def process_chunking():
-    if not os.path.exists('data/cleaned_su_data.json'):
-        print("Error: cleaned_su_data.json not found! Run Day 2 first.")
+def semantic_chunker():
+    # Load the cleaned data
+    if not os.path.exists('data/cleaned_data.json'):
+        print("Error: data/cleaned_data.json not found!")
         return
 
-    with open('data/cleaned_su_data.json', 'r', encoding='utf-8') as f:
-        cleaned_data = json.load(f)
+    with open('data/cleaned_data.json', 'r') as f:
+        data = json.load(f)
 
-    chunked_library = []
+    chunks = []
+    # Using a slightly larger chunk for better context
+    chunk_size = 1200 
+    overlap = 200
 
-    print("Starting Day 3: Chunking text into 500-character segments...")
+    print(f"Processing {len(data)} pages into semantic chunks...")
 
-    for entry in cleaned_data:
-        text_content = entry['content']
-        # Create the chunks
-        text_chunks = chunk_text(text_content)
+    for item in data:
+        text = item.get('content', '')
+        # SAFETY CHECK: If 'url' is missing, use 'Unknown' instead of crashing
+        url = item.get('url', 'https://www.cardiffstudents.com/ (Source Unknown)')
         
-        for i, chunk in enumerate(text_chunks):
-            # Save each chunk with its specific metadata for 'Source-Awareness'
-            chunked_library.append({
-                "chunk_id": f"{entry['category']}_{i}",
-                "category": entry['category'],
-                "source_url": entry['source_url'],
-                "content": chunk,
-                "date_chunked": "2026-04-18"
+        if not text:
+            continue
+
+        # Split into parts by sentence to avoid cutting in the middle of a word
+        parts = text.split('. ')
+        
+        current_chunk = ""
+        for part in parts:
+            if len(current_chunk) + len(part) < chunk_size:
+                current_chunk += part + ". "
+            else:
+                chunks.append({
+                    "content": current_chunk.strip(), 
+                    "url": url
+                })
+                # Maintain overlap for context continuity
+                current_chunk = current_chunk[-overlap:] + part + ". "
+        
+        # Add the final piece
+        if current_chunk:
+            chunks.append({
+                "content": current_chunk.strip(), 
+                "url": url
             })
 
-    # Save the final chunked data
-    with open('data/chunked_su_data.json', 'w', encoding='utf-8') as f:
-        json.dump(chunked_library, f, indent=4)
-
-    print(f"\n--- Day 3 Complete! ---")
-    print(f"Created {len(chunked_library)} total chunks.")
-    print("Saved to: data/chunked_su_data.json")
+    # Save the chunks
+    with open('data/chunks.json', 'w') as f:
+        json.dump(chunks, f, indent=4)
+    
+    print(f"✅ Success! Created {len(chunks)} high-quality semantic chunks.")
 
 if __name__ == "__main__":
-    process_chunking()
+    semantic_chunker()
