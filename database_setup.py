@@ -1,50 +1,42 @@
-import chromadb
 import json
+import chromadb
 import os
 
 def setup_database():
-    # 1. Initialize the Chroma Client
-    # This creates a folder called 'chroma_db' to store your data persistently
-    client = chromadb.PersistentClient(path="./chroma_db")
-
-    # 2. Create a Collection (think of this like a Table in a database)
-    # We'll call it "cardiff_su_info"
-    collection = client.get_or_create_collection(name="cardiff_su_info")
-
-    # 3. Load your chunks from Day 3
-    if not os.path.exists('data/chunked_su_data.json'):
-        print("Error: chunked_su_data.json not found! Run Day 3 first.")
-        return
-
-    with open('data/chunked_su_data.json', 'r', encoding='utf-8') as f:
+    # 1. Load ALL chunks
+    with open('data/chunks.json', 'r') as f:
         chunks = json.load(f)
 
-    print(f"Adding {len(chunks)} chunks to ChromaDB...")
+    print(f"🚀 Found {len(chunks)} total chunks. Preparing to store all of them...")
 
-    # 4. Prepare data for ChromaDB
-    # Chroma needs lists of IDs, Documents (text), and Metadata
-    documents = []
-    metadatas = []
-    ids = []
+    # 2. Setup Chroma
+    client = chromadb.PersistentClient(path="./chroma_db")
+    
+    # Delete the old collection if it exists to start fresh
+    try:
+        client.delete_collection("cardiff_su")
+    except:
+        pass
+        
+    collection = client.create_collection(name="cardiff_su")
 
-    for i, chunk in enumerate(chunks):
-        documents.append(chunk['content'])
-        metadatas.append({
-            "source": chunk['source_url'],
-            "category": chunk['category']
-        })
-        ids.append(f"id_{i}")
+    # 3. Add chunks in batches (to avoid memory crashes)
+    batch_size = 100
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i + batch_size]
+        
+        ids = [f"id_{j}" for j in range(i, i + len(batch))]
+        documents = [c['content'] for c in batch]
+        metadatas = [{"url": c['url']} for c in batch]
 
-    # 5. Upsert (Update or Insert) the data
-    collection.upsert(
-        documents=documents,
-        metadatas=metadatas,
-        ids=ids
-    )
+        collection.add(
+            ids=ids,
+            documents=documents,
+            metadatas=metadatas
+        )
+        print(f"✅ Added chunks {i} to {i + len(batch)}")
 
-    print("\n--- Day 4 Complete! ---")
-    print(f"Successfully stored {collection.count()} items in the Vector Database.")
-    print("Database folder created at: ./chroma_db")
+    print(f"\n✨ FINAL SUCCESS! Stored {len(chunks)} chunks in ChromaDB.")
 
 if __name__ == "__main__":
     setup_database()
