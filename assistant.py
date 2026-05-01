@@ -1,100 +1,140 @@
 import os
-import json
+import sys
+import glob
+
+# --- 1. THE DYNAMIC PATH SHIELD ---
+# Forces the script to use the venv libraries and ignore local conflicts
+current_dir = os.getcwd()
+venv_pattern = os.path.join(current_dir, 'venv', 'lib', 'python*', 'site-packages')
+found_paths = glob.glob(venv_pattern)
+
+# Isolate the environment from the current directory initially
+if current_dir in sys.path:
+    sys.path.remove(current_dir)
+
+if found_paths:
+    sys.path.insert(0, found_paths[0])
+    print(f"✅ Shield Active: Pointing to {os.path.basename(os.path.dirname(found_paths[0]))}")
+
+import toml
 import chromadb
-from sentence_transformers import SentenceTransformer
 
-# 1. Setup ChromaDB and Embedding Model
-# Using absolute paths ensures the cloud server finds the database every time
-base_dir = os.path.dirname(__file__)
-db_path = os.path.join(base_dir, "chroma_db")
-client = chromadb.PersistentClient(path=db_path)
-collection = client.get_or_create_collection(name="cardiff_su_data")
-model = SentenceTransformer('all-MiniLM-L6-v2')
-
-def get_fresh_events():
-    """Reads the manual JSON file for specific time-sensitive event details."""
+# Robust Import Strategy
+try:
+    from mistralai import Mistral
+    print("✅ Mistral (Standard) Loaded.")
+except ImportError:
     try:
-        json_path = os.path.join(base_dir, "event_data.json")
-        if os.path.exists(json_path):
-            with open(json_path, 'r') as f:
-                return json.load(f)
-        return []
+        from mistralai.client import MistralClient as Mistral
+        print("✅ Mistral (Legacy) Loaded.")
+    except ImportError:
+        print("❌ Critical Error: mistralai not found.")
+        print("Please run: pip install mistralai")
+        sys.exit(1)
+
+# Re-add current directory for database and file access
+sys.path.append(current_dir)
+
+# --- 2. CONFIGURATION & DATABASE ---
+DB_PATH = "./chroma_db"
+COLLECTION_NAME = "cardiff_su"
+
+def load_secrets():
+    """Reads your MISTRAL_API_KEY from .streamlit/secrets.toml"""
+    secrets_path = os.path.join(".streamlit", "secrets.toml")
+    try:
+        if not os.path.exists(secrets_path):
+            print(f"⚠️ Warning: {secrets_path} not found.")
+            return None
+        secrets = toml.load(secrets_path)
+        # Check for key in top-level or [default] section
+        api_key = secrets.get("MISTRAL_API_KEY") or secrets.get("default", {}).get("MISTRAL_API_KEY")
+        if not api_key:
+            print("❌ MISTRAL_API_KEY missing in secrets.toml")
+        return api_key
     except Exception as e:
-        print(f"Error reading JSON: {e}")
-        return []
+        print(f"⚠️ Secret Loading Error: {e}")
+        return None
 
-def search_database(query, n_results=10):
-    """Searches both the static database and the hourly scraped text file."""
+def get_context(query):
+    """Searches ChromaDB for relevant Cardiff SU information"""
     try:
-        query_embedding = model.encode(query).tolist()
+        db_client = chromadb.PersistentClient(path=DB_PATH)
+        collection = db_client.get_collection(name=COLLECTION_NAME)
+        
         results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=n_results
+            query_texts=[query],
+            n_results=7 
         )
         
-        context = ""
-        # Look for the file updated by the hourly GitHub Action
-        latest_file = os.path.join(base_dir, "data", "latest_events.txt")
-        if os.path.exists(latest_file):
-            with open(latest_file, "r", encoding="utf-8") as f:
-                # Add the freshly scraped web data to the context
-                context += "\n--- LIVE HOURLY WEB UPDATES ---\n" + f.read()[:2000]
-
-        # Add the long-term database knowledge
-        for i in range(len(results['documents'][0])):
-            doc = results['documents'][0][i]
-            source = results['metadatas'][0][i].get('source', 'https://www.cardiffstudents.com/')
-            context += f"\nSource: {source}\nContent: {doc}\n"
-        return context
+        context_text = ""
+        if results['documents'] and len(results['documents'][0]) > 0:
+            for i in range(len(results['documents'][0])):
+                doc = results['documents'][0][i]
+                meta = results['metadatas'][0][i] if results['metadatas'] else {}
+                url = meta.get('url', 'https://www.cardiffstudents.com/')
+                context_text += f"\n[SOURCE: {url}]\n{doc}\n---\n"
+            return context_text
+        return "No relevant information found in the SU archives."
     except Exception as e:
-        return f"Database search error: {e}"
+        return f"Database Error: {str(e)}"
 
-def generate_source_aware_prompt(user_question):
-    """Combines all data sources and enforces link-sharing rules."""
+# --- 3. CHAT LOGIC ---
+def ask_bot(user_query, mistral_client):
+    context = get_context(user_query)
     
-    # A. Search the Vector Database + Hourly Text File
-    db_context = search_database(user_question)
+    system_instruction = (
+        "You are the Cardiff Students' Union AI Assistant. "
+        "Use the provided context to answer questions. "
+        "Always provide the Source URL from the context in your answer."
+    )
     
-    # B. Get JSON Events
-    fresh_events_list = get_fresh_events()
-    event_context = ""
-    
-    keywords = ["event", "on", "happening", "today", "tonight", "party", "yolo", "link", "ticket"]
-    if any(word in user_question.lower() for word in keywords):
-        event_context = "\n--- JSON UPCOMING EVENTS (USE THESE LINKS) ---\n"
-        for event in fresh_events_list:
-            event_context += (
-                f"- EVENT: {event.get('title')}\n"
-                f"  DATE: {event.get('date')}\n"
-                f"  URL/LINK: {event.get('link', 'https://www.cardiffstudents.com/whatson/')}\n"
-                f"  DETAILS: {event.get('description', '')}\n\n"
+    try:
+        # Compatibility check for newer vs older SDK methods
+        if hasattr(mistral_client, 'chat') and hasattr(mistral_client.chat, 'complete'):
+            response = mistral_client.chat.complete(
+                model="mistral-small-latest",
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": f"CONTEXT:\n{context}\n\nQUESTION:\n{user_query}"},
+                ],
             )
+            return response.choices[0].message.content
+        else:
+            # Legacy Client method
+            from mistralai.models.chat_completion import ChatMessage
+            response = mistral_client.chat(
+                model="mistral-small-latest",
+                messages=[
+                    ChatMessage(role="system", content=system_instruction),
+                    ChatMessage(role="user", content=f"CONTEXT:\n{context}\n\nQUESTION:\n{user_query}")
+                ],
+            )
+            return response.choices[0].message.content
+    except Exception as e:
+        return f"Mistral API Error: {str(e)}"
 
-    # C. System Instructions
-    system_rules = """
-    You are the official Cardiff Students' Union Assistant. 
-    Your goal is to be helpful, accurate, and provide direct links.
-
-    RULES:
-    1. If a 'URL' or 'Link' is provided in the context below, you MUST include it in your answer as a clickable Markdown link like this: [Event Name](URL).
-    2. Use the 'JSON UPCOMING EVENTS' section for specific event times and links.
-    3. Use the 'LIVE HOURLY WEB UPDATES' for general news happening right now.
-    4. If you don't know the answer, point them to https://www.cardiffstudents.com/about/contact/.
-    5. Always end with 'Source Link:' and the most relevant URL found.
-    6. If the context contains a long list of text, scan it specifically for names of clubs, societies, or training courses the user mentioned.
-    7. YOU MUST SEARCH THROUGH ALL 10 CONTEXT CHUNKS. Look for words like 'Dance', 'Ballet', 'Hip Hop', or 'Society'. If you see a list of names, the user wants that list. Do not give up easily.
-    """
-
-    # Final Prompt
-    full_prompt = f"""
-    {system_rules}
-
-    {event_context}
-
-    {db_context}
-
-    USER QUESTION: {user_question}
+# --- 4. MAIN LOOP ---
+if __name__ == "__main__":
+    api_key = load_secrets()
     
-    ANSWER:
-    """
-    return full_prompt
+    if api_key:
+        # Initialize the client based on which import worked
+        client = Mistral(api_key=api_key)
+        
+        print("\n" + "═"*45)
+        print("🤖 CARDIFF SU SOURCE-AWARE BOT ACTIVE")
+        print("═"*45)
+        print("Type 'exit' to end the chat.\n")
+
+        while True:
+            query = input("Ask a question: ").strip()
+            if not query: continue
+            if query.lower() in ['exit', 'quit']:
+                print("Hwyl fawr! Goodbye!")
+                break
+            
+            print("Searching archives...")
+            answer = ask_bot(query, client)
+            print(f"\nBot:\n{answer}\n")
+            print("─" * 45)

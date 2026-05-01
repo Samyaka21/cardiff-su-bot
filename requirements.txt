@@ -1,7 +1,8 @@
-streamlit
-google-generativeai
+mistralai==1.1.0
 chromadb
-sentence-transformers
+toml
 beautifulsoup4
-requests
-pillow
+pandas
+selenium
+webdriver-manager
+streamlit
