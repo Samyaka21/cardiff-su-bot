@@ -1,8 +1,6 @@
-mistralai==1.1.0
+streamlit
+mistralai==0.4.2
 chromadb
 toml
-beautifulsoup4
-pandas
-selenium
-webdriver-manager
-streamlit
+onnxruntime
+numpy<2.0.0
