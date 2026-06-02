@@ -100,7 +100,12 @@ def ask_chatbot(user_query):
             links_formatted = "\n\n**Sources & Further Reading:**\n"
             for link in unique_sources:
                 links_formatted += f"- [{link}]({link})\n"
-            return ai_answer + links_formatted
+            final_output = ai_answer + links_formatted
+            return final_output.replace("(Source Unknown)", "")
+        
+        # If there are no sources, still clean the AI answer just in case
+        return ai_answer.replace("(Source Unknown)", "")
+           
         
 
     except Exception as e:
