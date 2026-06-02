@@ -75,12 +75,14 @@ def ask_chatbot(user_query):
 
         # Initialize the Mistral Client
         client = Mistral(api_key=api_key)
-        
         system_instruction = (
             "You are the Cardiff Students' Union AI Assistant. "
             "Use the provided context to answer questions accurately. "
-            "If the answer is not in the context, politely state you don't know."
+            "If the answer is not in the context, politely state you don't know. "
+            "DO NOT append any source links, URLs, or phrases like '(Source Unknown)' "
+            "at the end of your answer, as the system will handle formatting links automatically."
         )
+        
 
         # Generate the AI response
         response = client.chat(
@@ -100,7 +102,6 @@ def ask_chatbot(user_query):
                 links_formatted += f"- [{link}]({link})\n"
             return ai_answer + links_formatted
         
-        return ai_answer
 
     except Exception as e:
         return f"❌ An error occurred: {str(e)}"
